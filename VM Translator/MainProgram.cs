@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 
 namespace VM_Translator {
@@ -14,7 +14,9 @@ namespace VM_Translator {
             int j = 0;
             for (int i = 0; i < allFiles.Length; i++)
                 if (allFiles[i].Substring(allFiles[i].LastIndexOf('.')).Equals(".vm"))
-                    vmFiles[j++] = allFiles[i];                                
+                    vmFiles[j++] = allFiles[i];
+
+            codeWriter.WriteInit();
 
             for (int i = 0; i < j; i++) {
                 Parser parser = new Parser(vmFiles[i]);
@@ -31,12 +33,17 @@ namespace VM_Translator {
                             arg2 = parser.Arg2();
                     }
 
-                    if (type == typeOfCommand.C_ARITHMETIC)
-                        codeWriter.WriteArithmetic(arg1);
-                    else if (type == typeOfCommand.C_POP)
-                        codeWriter.WritePushPop("pop", arg1, int.Parse(arg2));
-                    else if (type == typeOfCommand.C_PUSH)
-                        codeWriter.WritePushPop("push", arg1, int.Parse(arg2));
+                    switch (type) {
+                        case typeOfCommand.C_ARITHMETIC: codeWriter.WriteArithmetic(arg1); break;
+                        case typeOfCommand.C_POP: codeWriter.WritePushPop("pop", arg1, int.Parse(arg2)); break;
+                        case typeOfCommand.C_PUSH: codeWriter.WritePushPop("push", arg1, int.Parse(arg2)); break;
+                        case typeOfCommand.C_LABEL: codeWriter.WriteLabel(arg1); break;
+                        case typeOfCommand.C_GOTO: codeWriter.WriteGoto(arg1); break;
+                        case typeOfCommand.C_IF: codeWriter.WriteIf(arg1); break;
+                        case typeOfCommand.C_CALL: codeWriter.WriteCall(arg1, int.Parse(arg2)); break;
+                        case typeOfCommand.C_FUNCTION: codeWriter.WriteFunction(arg1, int.Parse(arg2)); break;
+                        case typeOfCommand.C_RETURN: codeWriter.WriteReturn(); break;
+                    }
                 }
 
                 parser.Close();
