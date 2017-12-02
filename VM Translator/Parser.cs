@@ -1,9 +1,8 @@
-﻿using System;
+using System;
 using System.IO;
 
 namespace VM_Translator {
-    /*
-     * Handles the parsing of a single .vm file, and encapsulates access to the input code.
+    /* Handles the parsing of a single .vm file, and encapsulates access to the input code.
      * It reads VM commands, parses them, and provides convenient access to their components.
      * In addition, it removes all white space and comments.
      */
@@ -26,7 +25,7 @@ namespace VM_Translator {
 
                 short comment = 0;
                 for (int i = 0; i < startString.Length && comment != 2; i++) {
-                    if (startString[i] == '/') comment++;
+                    if (startString[i] == '/') comment++;                    
                     else newString += startString[i];
                 }
                 if (!newString.Equals(string.Empty))
@@ -66,13 +65,15 @@ namespace VM_Translator {
         }
 
         public string Arg1() {
-            string[] command = CurCommand.Split(' ');
+            string foo = CurCommand.Trim();
+            string[] command = foo.Split(' ');
             if (command.Length == 1) return command[0];
             return command[1];
         }
 
         public string Arg2() {
-            string[] command = CurCommand.Split(' ');
+            string foo = CurCommand.Trim();
+            string[] command = foo.Split(' ');
             return command[2];
         }
 
