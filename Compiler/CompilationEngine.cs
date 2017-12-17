@@ -1,173 +1,159 @@
-﻿using System;
+using System;
 using System.IO;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Compiler {
+    /* Effects the actual compilation output
+     */
+
     class CompilationEngine {
         Tokenizer tokenizer;
         FileStream outFile;
         StreamWriter outWriter;
         SymbolTable table;
+        VMWriter mWriter;
 
         string className;
         string[] op = { "+", "-", "*", "/", "&", "|", "<", ">", "=", "&lt;", "&gt;", "&amp;" };
+        int nArgs;
+        string returnType = string.Empty;
+        int count = -1;
+        int count2 = -1;
+   
 
         public CompilationEngine(Tokenizer foo, string path) {
             tokenizer = foo;
-            path = path.Substring(0, path.LastIndexOf('.')) + ".xml";
-            outFile = new FileStream(path, FileMode.Create);
-            outWriter = new StreamWriter(outFile);
+            path = path.Substring(0, path.LastIndexOf('.')) + ".vm";
+
             table = new SymbolTable();
+            mWriter = new VMWriter(path);
             CompileClass();
         }
 
         public void CompileClass() {
             tokenizer.Advance();
-            outWriter.WriteLine("<class>");
-            outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
             tokenizer.Advance();
+
             className = tokenizer.Identifier();
-            outWriter.WriteLine("<identifier> " + tokenizer.Identifier() + " class </identifier>");
+
             tokenizer.Advance();
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
             tokenizer.Advance();
             while (tokenizer.TokenType() == typeOfToken.KEYWORD && (tokenizer.KeyWord().Equals("static") || tokenizer.KeyWord().Equals("field")))
                 CompileClassVarDec();
             while (tokenizer.TokenType() == typeOfToken.KEYWORD && (tokenizer.KeyWord().Equals("constructor") || tokenizer.KeyWord().Equals("function") || tokenizer.KeyWord().Equals("method")))
                 CompileSubroutine();
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>"); 
-            outWriter.WriteLine("</class>");
         }
 
         public void CompileClassVarDec() {
-            outWriter.WriteLine("<classVarDec>");
-            outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
             kind foo = GetKind(tokenizer.KeyWord());
             tokenizer.Advance();
             string type;
             if (tokenizer.TokenType() == typeOfToken.KEYWORD) {
                 type = tokenizer.KeyWord();
-                outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
             } else {
                 type = tokenizer.Identifier();
-                outWriter.WriteLine("<identifier> " + tokenizer.Identifier() + " class </identifier>");
             }
             tokenizer.Advance();
 
             table.Define(tokenizer.Identifier(), type, foo);
-            outWriter.WriteLine("<identifier> " + tokenizer.Identifier() + " " + table.KindOf(tokenizer.Identifier()) + " defined " + table.IndexOf(tokenizer.Identifier()) + " </identifier>");
 
             tokenizer.Advance();
             while (tokenizer.Symbol().Equals(",")) {
-                outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
                 tokenizer.Advance();
                 table.Define(tokenizer.Identifier(), type, foo);
-                outWriter.WriteLine("<identifier> " + tokenizer.Identifier() + " " + table.KindOf(tokenizer.Identifier()) + " defined " + table.IndexOf(tokenizer.Identifier()) + " </identifier>");
                 tokenizer.Advance();
             }
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
             tokenizer.Advance();
-            outWriter.WriteLine("</classVarDec>");
         }
 
         public void CompileSubroutine() {
             table.StartSubroutine();
-            if (tokenizer.KeyWord().Equals("method")) 
+            count = count2 = -1;
+
+            string morc = tokenizer.KeyWord();
+
+            tokenizer.Advance();
+
+            returnType = tokenizer.TokenType() == typeOfToken.KEYWORD ? tokenizer.KeyWord() : tokenizer.Identifier();
+
+            tokenizer.Advance();
+            string subroutineName = tokenizer.Identifier();
+            
+            tokenizer.Advance();
+            tokenizer.Advance();
+            if (morc.Equals("method")) 
                 table.Define("this", className, kind.ARG);
-            outWriter.WriteLine("<subroutineDec>");
-            outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
-            tokenizer.Advance();
-            if (tokenizer.TokenType() == typeOfToken.KEYWORD)
-                outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
-            else outWriter.WriteLine("<identifier> " + tokenizer.Identifier() + " </identifier>");
-            tokenizer.Advance();
-            outWriter.WriteLine("<identifier> " + tokenizer.Identifier() + " subroutine </identifier>");
-            tokenizer.Advance();
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
-            tokenizer.Advance();
             CompileParameterList();
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
             tokenizer.Advance();
-            outWriter.WriteLine("<subroutineBody>");
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
             tokenizer.Advance();
+            int nLocals = 0;
             while (tokenizer.TokenType() == typeOfToken.KEYWORD && tokenizer.KeyWord().Equals("var")) {
-                CompileVarDec();
+                nLocals += CompileVarDec();
             }
+            mWriter.WriteFunction(className + '.' + subroutineName, nLocals);
+
+            if (morc.Equals("method")) {
+                mWriter.WritePush("argument", 0);
+                mWriter.WritePop("pointer", 0);
+            }
+
+            if (morc.Equals("constructor")) {
+                mWriter.WritePush("constant", table.VarCount(kind.FIELD));
+                mWriter.WriteCall("Memory.alloc", 1);
+                mWriter.WritePop("pointer", 0);
+            }
+
             CompileStatements(); 
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
             tokenizer.Advance();
-            outWriter.WriteLine("</subroutineBody>");
-            outWriter.WriteLine("</subroutineDec>");
         }
 
         public void CompileParameterList() {
-            outWriter.WriteLine("<parameterList>");
             if (tokenizer.TokenType() == typeOfToken.KEYWORD || tokenizer.TokenType() == typeOfToken.IDENTIFIER) {
                 string type;
                 if (tokenizer.TokenType() == typeOfToken.KEYWORD) {
                     type = tokenizer.KeyWord();
-                    outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
                 } else {
                     type = tokenizer.Identifier();
-                    outWriter.WriteLine("<identifier> " + tokenizer.Identifier() + " </identifier>");
                 }
                 tokenizer.Advance();
                 table.Define(tokenizer.Identifier(), type, kind.ARG);
-                outWriter.WriteLine("<identifier> " + tokenizer.Identifier() + " " + table.KindOf(tokenizer.Identifier()) + " defined " + table.IndexOf(tokenizer.Identifier()) + " </identifier>");
                 tokenizer.Advance();
                 while (tokenizer.Symbol().Equals(",")) {
-                    outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+                    
                     tokenizer.Advance();
                     if (tokenizer.TokenType() == typeOfToken.KEYWORD) {
                         type = tokenizer.KeyWord();
-                        outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
                     } else {
                         type = tokenizer.Identifier();
-                        outWriter.WriteLine("<identifier> " + tokenizer.Identifier() + " </identifier>");
                     }
                     tokenizer.Advance();
-                    table.Define(tokenizer.Identifier(), type, kind.ARG);
-                    outWriter.WriteLine("<identifier> " + tokenizer.Identifier() + " " + table.KindOf(tokenizer.Identifier()) + " defined " + table.IndexOf(tokenizer.Identifier()) + " </identifier>");
+                    table.Define(tokenizer.Identifier(), type, kind.ARG);                  
                     tokenizer.Advance();
                 }
             }
-            outWriter.WriteLine("</parameterList>");
         }
 
-        public void CompileVarDec() {
-            outWriter.WriteLine("<varDec>");
-            outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
+        public int CompileVarDec() {
+            int result = 1;
             tokenizer.Advance();
             string type;
-            if (tokenizer.TokenType() == typeOfToken.KEYWORD) {
+            if (tokenizer.TokenType() == typeOfToken.KEYWORD) 
                 type = tokenizer.KeyWord();
-                outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
-            } else {
-                type = tokenizer.Identifier();
-                outWriter.WriteLine("<identifier> " + tokenizer.Identifier() + " class </identifier>");
-            }
+            else type = tokenizer.Identifier();
             tokenizer.Advance();
             table.Define(tokenizer.Identifier(), type, kind.VAR);
-            outWriter.WriteLine("<identifier> " + tokenizer.Identifier() + " " + table.KindOf(tokenizer.Identifier()) + " defined " + table.IndexOf(tokenizer.Identifier()) + " </identifier>");
             tokenizer.Advance();        
             while (tokenizer.Symbol().Equals(",")) {
-                outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+                result++;
                 tokenizer.Advance();
                 table.Define(tokenizer.Identifier(), type, kind.VAR);
-                outWriter.WriteLine("<identifier> " + tokenizer.Identifier() + " " + table.KindOf(tokenizer.Identifier()) + " defined " + table.IndexOf(tokenizer.Identifier()) + " </identifier>");
                 tokenizer.Advance();
             }
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
             tokenizer.Advance();
-            outWriter.WriteLine("</varDec>");
+            return result;
         }
 
         public void CompileStatements() {
-            outWriter.WriteLine("<statements>");
             while (tokenizer.TokenType() == typeOfToken.KEYWORD) {
                 switch (tokenizer.KeyWord()) {
                     case ("do"): CompileDo(); break;
@@ -177,187 +163,206 @@ namespace Compiler {
                     case ("if"): CompileIf(); break;
                 }
             }
-            outWriter.WriteLine("</statements>");
         }
 
         public void CompileDo() {
-            outWriter.WriteLine("<doStatement>");
-            outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
             tokenizer.Advance();
-            //subroutinecall
             string bar = tokenizer.Identifier();
             tokenizer.Advance();
             CompileSubroutineCall(bar);
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+            mWriter.WritePop("temp", 0);
             tokenizer.Advance();
-            outWriter.WriteLine("</doStatement>");
         }
 
         public void CompileExpressionList() {
-            outWriter.WriteLine("<expressionList>");
             if (!(tokenizer.TokenType() == typeOfToken.SYMBOL && tokenizer.Symbol().Equals(")"))) {
                 CompileExpression();
+                nArgs++;
                 while (tokenizer.TokenType() == typeOfToken.SYMBOL && tokenizer.Symbol().Equals(",")) {
-                    outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+                    nArgs++;
                     tokenizer.Advance();
                     CompileExpression();
                 }
             }
-            outWriter.WriteLine("</expressionList>");
         }
 
         public void CompileLet() {
-            outWriter.WriteLine("<letStatement>");
-            outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
+            bool k = false;
             tokenizer.Advance();
-            outWriter.WriteLine("<identifier> " + tokenizer.Identifier() + " " + table.KindOf(tokenizer.Identifier()) + " used " + table.IndexOf(tokenizer.Identifier()) + " </identifier>");
+            string nameOfVariable = tokenizer.Identifier();
             tokenizer.Advance();
             if (tokenizer.Symbol().Equals("[")) {
-                outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
                 tokenizer.Advance();
                 CompileExpression();
-                outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+                mWriter.WritePush(GetSegment(table.KindOf(nameOfVariable)), table.IndexOf(nameOfVariable));
+                mWriter.WriteArithmetic("+");
                 tokenizer.Advance();
+                k = !k;
             }
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
             tokenizer.Advance();
-            CompileExpression();          
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+            CompileExpression();
+            
+            if (k) {
+                mWriter.WritePop("temp", 0);
+                mWriter.WritePop("pointer", 1);
+                mWriter.WritePush("temp", 0);
+                mWriter.WritePop("that", 0);
+            } else
+                mWriter.WritePop(GetSegment(table.KindOf(nameOfVariable)), table.IndexOf(nameOfVariable));
             tokenizer.Advance();       
-            outWriter.WriteLine("</letStatement>");
         }
 
         public void CompileWhile() {
-            outWriter.WriteLine("<whileStatement>");
-            outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
+            int k = NextCount("while");
+            mWriter.WriteLabel("WHILE_EXP" + k);
             tokenizer.Advance();
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
             tokenizer.Advance();
             CompileExpression();
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+            mWriter.WriteArithmetic("~");
+            mWriter.WriteIf("WHILE_END" + k);
             tokenizer.Advance();
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
             tokenizer.Advance();
             CompileStatements();
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+            mWriter.WriteGoto("WHILE_EXP" + k);
+            mWriter.WriteLabel("WHILE_END" + k);
             tokenizer.Advance();
-            outWriter.WriteLine("</whileStatement>");
         }
 
         public void CompileReturn() {
-            outWriter.WriteLine("<returnStatement>");
-            outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
             tokenizer.Advance();
             if (!(tokenizer.TokenType() == typeOfToken.SYMBOL && tokenizer.Symbol().Equals(";")))
                 CompileExpression();
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+            if (returnType.Equals("void")) {
+                mWriter.WritePush("constant", 0);
+            }
+            mWriter.WriteReturn();
             tokenizer.Advance();
-            outWriter.WriteLine("</returnStatement>");
         }
 
         public void CompileIf() {
-            outWriter.WriteLine("<ifStatement>");
-            outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
+            int k = NextCount("if");
             tokenizer.Advance();
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
             tokenizer.Advance();
             CompileExpression();
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
             tokenizer.Advance();
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
             tokenizer.Advance();
+            mWriter.WriteIf("IF_TRUE" + k);
+            mWriter.WriteGoto("IF_FALSE" + k);
+            mWriter.WriteLabel("IF_TRUE" + k);
             CompileStatements();
-            outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
             tokenizer.Advance();
             if (tokenizer.TokenType() == typeOfToken.KEYWORD && tokenizer.KeyWord().Equals("else")) {
-                outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
+                mWriter.WriteGoto("IF_END" + k);
+                mWriter.WriteLabel("IF_FALSE" + k);
                 tokenizer.Advance();
-                outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
                 tokenizer.Advance();
                 CompileStatements();
-                outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
                 tokenizer.Advance();
+                mWriter.WriteLabel("IF_END" + k);
+            } else {
+                mWriter.WriteLabel("IF_FALSE" + k);
             }
-            outWriter.WriteLine("</ifStatement>");
         }
 
         public void CompileExpression() {
-            outWriter.WriteLine("<expression>");
             CompileTerm();
+            string command;
             while (tokenizer.TokenType() == typeOfToken.SYMBOL && op.Contains(tokenizer.Symbol())) {
-                outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+                command = tokenizer.Symbol();
                 tokenizer.Advance();
                 CompileTerm();
-            }
-            outWriter.WriteLine("</expression>");
+                mWriter.WriteArithmetic(command);
+            }      
         }
         
         public void CompileTerm() {
-            outWriter.WriteLine("<term>");
             if (tokenizer.TokenType() == typeOfToken.INT_CONST) {
-                outWriter.WriteLine("<integerConstant> " + tokenizer.IntVal() + " </integerConstant>");
+                mWriter.WritePush("constant", tokenizer.IntVal());
                 tokenizer.Advance();
             } else if (tokenizer.TokenType() == typeOfToken.STRING_CONST) {
-                outWriter.WriteLine("<stringConstant> " + tokenizer.stringVal() + " </stringConstant>");
+                mWriter.WritePush("constant", tokenizer.stringVal().Length);
+                mWriter.WriteCall("String.new", 1);
+                for (int i = 0; i < tokenizer.stringVal().Length; i++) {
+                    mWriter.WritePush("constant", tokenizer.stringVal()[i]);
+                    mWriter.WriteCall("String.appendChar", 2);
+                }
                 tokenizer.Advance();
             } else if (tokenizer.TokenType() == typeOfToken.SYMBOL) {
                 if (tokenizer.Symbol().Equals("(")) {
-                    outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
                     tokenizer.Advance();
                     CompileExpression(); 
-                    outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
                     tokenizer.Advance();
-                } else {
-                    outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+                } else if (tokenizer.Symbol().Equals("-")) {
+                    tokenizer.Advance();
+                    CompileTerm();
+                    mWriter.WriteArithmetic("neg");
+                } else if (tokenizer.Symbol().Equals("~")) {
+                    tokenizer.Advance();
+                    CompileTerm();
+                    mWriter.WriteArithmetic("~");
+                }
+                else {
                     tokenizer.Advance();
                     CompileTerm();
                 }
             } else if (tokenizer.TokenType() == typeOfToken.KEYWORD) {
-                outWriter.WriteLine("<keyword> " + tokenizer.KeyWord() + " </keyword>");
+                switch (tokenizer.KeyWord()) {
+                    case "null": mWriter.WritePush("constant", 0); break;
+                    case "false": mWriter.WritePush("constant", 0); break;
+                    case "true": mWriter.WritePush("constant", 0); mWriter.WriteArithmetic("~"); break;
+                    case "this": mWriter.WritePush("pointer", 0); break;
+                }
                 tokenizer.Advance();
             } else {
                 string bar = tokenizer.Identifier();
+                if (table.KindOf(bar) != kind.NONE && (char.IsLower(table.TypeOf(bar)[0]) || table.KindOf(bar) == kind.STATIC || table.TypeOf(bar).Equals("Array")))
+                    mWriter.WritePush(GetSegment(table.KindOf(bar)), table.IndexOf(bar));
+
                 tokenizer.Advance();
                 if (tokenizer.TokenType() == typeOfToken.SYMBOL && tokenizer.Symbol().Equals("[")) {
-                    outWriter.WriteLine("<identifier> " + bar + " " + table.KindOf(bar) + " used " + table.IndexOf(bar) + " </identifier>");
-                    outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
                     tokenizer.Advance();
                     CompileExpression();
-                    outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+                    mWriter.WriteArithmetic("+");
+                    mWriter.WritePop("pointer", 1);
+                    mWriter.WritePush("that", 0);
                     tokenizer.Advance();
                 } else if (tokenizer.TokenType() == typeOfToken.SYMBOL && (tokenizer.Symbol().Equals("(") || tokenizer.Symbol().Equals("."))) {
                     CompileSubroutineCall(bar);
                 }
             }
-            outWriter.WriteLine("</term>");
         }
 
         public void CompileSubroutineCall(string bar) {
+            nArgs = 0;
             if (tokenizer.Symbol().Equals("(")) {
-                outWriter.WriteLine("<identifier> " + bar + " subroutine </identifier>");
-                outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+                nArgs = 1;
                 tokenizer.Advance();
+                mWriter.WritePush("pointer", 0);
                 CompileExpressionList();
-                outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+                mWriter.WriteCall(className + "." + bar, nArgs);
                 tokenizer.Advance();
             } else {
-                if (char.IsUpper(bar[0]))
-                    outWriter.WriteLine("<identifier> " + bar + " class </identifier>");
-                else
-                    outWriter.WriteLine("<identifier> " + bar + " " + table.KindOf(bar) + " used " + table.IndexOf(bar) + " </identifier>");
-                outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+                if (char.IsLower(bar[0])) {
+                    nArgs++;
+                    mWriter.WritePush(GetSegment(table.KindOf(bar)), table.IndexOf(bar));
+                    bar = table.TypeOf(bar);              
+                }
+                bar += '.';
+
                 tokenizer.Advance();
-                outWriter.WriteLine("<identifier> " + tokenizer.Identifier() + " subroutine </identifier>");
+                string foo = tokenizer.Identifier();
                 tokenizer.Advance();
-                outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
                 tokenizer.Advance();
+
                 CompileExpressionList();
-                outWriter.WriteLine("<symbol> " + tokenizer.Symbol() + " </symbol>");
+
+                mWriter.WriteCall(bar + foo, nArgs);
+
                 tokenizer.Advance();
             }
         }
 
-        public kind GetKind(string str) {
+        private kind GetKind(string str) {
             switch (str) {
                 case "var": return kind.VAR;
                 case "static": return kind.STATIC;
@@ -365,10 +370,26 @@ namespace Compiler {
                 default: return kind.ARG;
             }
         }
+        
+        private string GetSegment(kind k) {
+            switch (k) {
+                case kind.ARG: return "argument";
+                case kind.STATIC: return "static";
+                case kind.VAR: return "local";
+                case kind.FIELD: return "this";
+            }
+            throw new Exception();
+        }
+
+        private int NextCount(string str) {
+            if (str.Equals("while"))
+                return ++count;
+            else return ++count2;
+        }
+
 
         public void Close() {
-            outWriter.Close();
-            outFile.Close();
+            mWriter.Close();
         }
     }
 }
