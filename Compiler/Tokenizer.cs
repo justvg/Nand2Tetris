@@ -1,10 +1,12 @@
-﻿using System;
+using System;
 using System.IO;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 
 namespace Compiler {
+    /* Removes all comments and white space from the input stream
+     * breaks it into Jack-language tokens, as specified by the Jack grammar
+     */
+
     enum typeOfToken { KEYWORD, SYMBOL, IDENTIFIER, INT_CONST, STRING_CONST }
 
     class Tokenizer {
