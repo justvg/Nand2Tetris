@@ -1,10 +1,13 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Compiler {
+    /* Provides a symbol table abstraction
+     * The symbol table associates the
+     * identifier names found in the program with identifier properties
+     * needed for compilation: type, kind, and running index
+     */
+
     enum kind { STATIC, FIELD, ARG, VAR, NONE }
 
     class SymbolTable {
