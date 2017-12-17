@@ -1,11 +1,8 @@
-﻿using System;
 using System.IO;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Compiler {
+    /* top-level driver that sets up and invokes the other modules
+     */
     class Compiler {
         static void Main(string[] args) {
             string[] allFiles = Directory.GetFiles(args[0]);
@@ -23,7 +20,7 @@ namespace Compiler {
                 CompilationEngine compEng = new CompilationEngine(tokenizer, jackFiles[i]);
                 tokenizer.Close();
                 compEng.Close();
-            } 
+            }
         }
     }
 }
